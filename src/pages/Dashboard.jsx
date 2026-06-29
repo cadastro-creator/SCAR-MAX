@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import Fila from './Fila.jsx'
 
 const MENU = [
   { id: 'home',        icon: '⬡',  label: 'Dashboard'        },
@@ -178,6 +179,7 @@ export default function Dashboard() {
 // ─── ROTEADOR DE PÁGINAS ──────────────────────────────────────────────────────
 function PaginaAtiva({ id, perfil, user }) {
   if (id === 'home') return <PaginaHome perfil={perfil} user={user} />
+  if (id === 'fila') return <Fila />
   return <EmConstrucao />
 }
 
