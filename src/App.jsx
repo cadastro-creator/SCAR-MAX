@@ -3,11 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import AcessoNegado from './pages/AcessoNegado.jsx'
 
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { authStatus } = useAuth()
 
-  if (loading) return (
+  if (authStatus === 'loading') return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       height: '100vh', background: 'var(--bg)', color: 'var(--text2)',
@@ -24,7 +25,10 @@ function PrivateRoute({ children }) {
       <span>Carregando NEXUS...</span>
     </div>
   )
-  return user ? children : <Navigate to="/login" replace />
+
+  if (authStatus === 'unauthorized') return <AcessoNegado />
+  if (authStatus === 'unauthenticated') return <Navigate to="/login" replace />
+  return children
 }
 
 export default function App() {
