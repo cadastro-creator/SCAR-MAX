@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import { getConfigSistema, criarLembreteVPE } from '../services/notificacoes.js'
 
 const ESTADO_CONFIG = {
   ATIVO_PORTFOLIO:  { label: 'Ativo Portfólio',  cor: '#34c97e', badge: 'badge-green',  timer: false },
@@ -24,7 +25,7 @@ function diasRestantes(timerInicio, timerDias) {
 }
 
 export default function Produtos() {
-  const { perfil } = useAuth()
+  const { perfil, user } = useAuth()
   const isAdmin = ['SUPER_ADMIN', 'GESTOR_CADASTRO'].includes(perfil?.perfil)
 
   const [produtos, setProdutos] = useState([])
@@ -40,6 +41,38 @@ export default function Produtos() {
     })
     return unsub
   }, [])
+
+  // Verifica lembretes VPE ao carregar produtos
+  useEffect(() => {
+    if (!produtos.length) return
+    const perfisQueVerificam = ['SUPER_ADMIN', 'GESTOR_CADASTRO']
+    if (!perfisQueVerificam.includes(perfil?.perfil)) return
+
+    async function verificarLembretes() {
+      const cfg = await getConfigSistema()
+      if (!cfg.lembreteVPE?.ativo) return
+
+      const intervaloDias = cfg.lembreteVPE.intervaloDias || 7
+      const agora = Date.now()
+      const vpeAtivos = produtos.filter(p => p.estado === 'VPE_ATIVO')
+
+      for (const produto of vpeAtivos) {
+        const ultimoMs = produto.ultimoLembreteVPE?.toDate?.()?.getTime()
+          || produto.criadoEm?.toDate?.()?.getTime()
+          || 0
+        const diasPassados = (agora - ultimoMs) / 86_400_000
+
+        if (diasPassados >= intervaloDias) {
+          await criarLembreteVPE({ produto, config: cfg })
+          await updateDoc(doc(db, 'produtos', produto.codigoCitel), {
+            ultimoLembreteVPE: serverTimestamp(),
+          })
+        }
+      }
+    }
+
+    verificarLembretes()
+  }, [produtos, perfil?.perfil]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Produtos com timer vencido (alerta) — calculado no client, sem escrita extra
   const vencidos = produtos.filter(p => {

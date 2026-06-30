@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, serverTimestamp, addDoc } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import { notificarAprovacao, notificarDevolucao, notificarReprovacao } from '../services/notificacoes.js'
 
 const STATUS_CONFIG = {
   AGUARDANDO:  { label: 'Aguardando',  badge: 'badge-amber',  icon: '⏳' },
@@ -262,20 +263,21 @@ function ModalSolicitacao({ solicitacao: s, onClose, isGestor, perfil, user }) {
       if (tipo === 'APROVAR' && codigoCitel) {
         const ehVPE = s.tipo === 'VPE'
         await setDoc(doc(db, 'produtos', codigoCitel.trim()), {
-          codigoCitel:    codigoCitel.trim(),
-          descricao:      s.descricao || '',
-          marca:          s.marca || '',
-          fornecedor:     s.fornecedor || '',
-          tipoOrigem:     s.tipo,
-          estado:         ehVPE ? 'VPE_ATIVO' : 'ATIVO_PORTFOLIO',
-          ativoCompras:   true,
-          timerInicio:    ehVPE ? serverTimestamp() : null,
-          timerDias:      ehVPE ? 30 : null,
-          vendedor:       s.vendedor || null,
-          cliente:        s.cliente || null,
-          solicitacaoId:  s.id,
-          criadoEm:       serverTimestamp(),
-          atualizadoEm:   serverTimestamp(),
+          codigoCitel:         codigoCitel.trim(),
+          descricao:           s.descricao || '',
+          marca:               s.marca || '',
+          fornecedor:          s.fornecedor || '',
+          tipoOrigem:          s.tipo,
+          estado:              ehVPE ? 'VPE_ATIVO' : 'ATIVO_PORTFOLIO',
+          ativoCompras:        true,
+          timerInicio:         ehVPE ? serverTimestamp() : null,
+          timerDias:           ehVPE ? 30 : null,
+          vendedor:            s.vendedor || null,
+          cliente:             s.cliente || null,
+          solicitacaoId:       s.id,
+          ultimoLembreteVPE:   null,
+          criadoEm:            serverTimestamp(),
+          atualizadoEm:        serverTimestamp(),
           historico: [{
             acao: 'CRIADO',
             estado: ehVPE ? 'VPE_ATIVO' : 'ATIVO_PORTFOLIO',
@@ -283,6 +285,15 @@ function ModalSolicitacao({ solicitacao: s, onClose, isGestor, perfil, user }) {
             data: new Date().toISOString(),
           }],
         }, { merge: true })
+        await notificarAprovacao({ solicitacao: { ...s, id: s.id }, codigoCitel: codigoCitel.trim() })
+      }
+
+      if (tipo === 'DEVOLVER') {
+        await notificarDevolucao({ solicitacao: { ...s, id: s.id }, motivo })
+      }
+
+      if (tipo === 'REPROVAR') {
+        await notificarReprovacao({ solicitacao: { ...s, id: s.id }, motivo })
       }
 
       onClose()

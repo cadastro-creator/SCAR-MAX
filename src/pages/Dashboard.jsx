@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
+import React, { useState, useEffect, useRef } from 'react'
+import { collection, query, where, getDocs, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import Fila from './Fila.jsx'
@@ -22,6 +22,9 @@ export default function Dashboard() {
   const isAdmin = ['SUPER_ADMIN', 'GESTOR_CADASTRO'].includes(perfil?.perfil)
   const [paginaAtiva, setPaginaAtiva] = useState('home')
   const [alertasVencidos, setAlertasVencidos] = useState(0)
+  const [notificacoes, setNotificacoes] = useState([])
+  const [sinoAberto, setSinoAberto] = useState(false)
+  const sinoRef = useRef(null)
 
   // Sino de alertas em tempo real — produtos com timer (lê 1x via onSnapshot, sem custo extra)
   useEffect(() => {
@@ -41,6 +44,46 @@ export default function Dashboard() {
     )
     return unsub
   }, [])
+
+  // Listener de notificações do sistema para o perfil do usuário
+  useEffect(() => {
+    if (!perfil?.perfil) return
+    const q = query(
+      collection(db, 'notificacoes'),
+      where('perfis', 'array-contains', perfil.perfil)
+    )
+    const unsub = onSnapshot(q, snap => {
+      const naoLidas = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(n => !n.leitores?.[user?.uid])
+        .sort((a, b) => (b.criadoEm?.seconds || 0) - (a.criadoEm?.seconds || 0))
+      setNotificacoes(naoLidas)
+    })
+    return () => unsub()
+  }, [perfil?.perfil, user?.uid])
+
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickFora(e) {
+      if (sinoRef.current && !sinoRef.current.contains(e.target)) {
+        setSinoAberto(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickFora)
+    return () => document.removeEventListener('mousedown', handleClickFora)
+  }, [])
+
+  async function marcarLida(notifId) {
+    await updateDoc(doc(db, 'notificacoes', notifId), {
+      [`leitores.${user.uid}`]: new Date(),
+    })
+  }
+
+  async function marcarTodasLidas() {
+    for (const n of notificacoes) await marcarLida(n.id)
+  }
+
+  const totalSino = alertasVencidos + notificacoes.length
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -178,30 +221,91 @@ export default function Dashboard() {
             {MENU.find(m => m.id === paginaAtiva)?.label || 'Dashboard'}
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* SINO DE ALERTAS — timers de produtos vencidos */}
-            <div
-              onClick={() => setPaginaAtiva('produtos')}
-              style={{
-                position: 'relative', cursor: 'pointer',
-                width: 34, height: 34, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: alertasVencidos > 0 ? 'rgba(242,92,110,.12)' : 'var(--surface2)',
-                border: `1px solid ${alertasVencidos > 0 ? 'rgba(242,92,110,.3)' : 'var(--border)'}`,
-              }}
-              title={alertasVencidos > 0 ? `${alertasVencidos} produto(s) com timer vencido` : 'Nenhum alerta'}
-            >
-              <span style={{ fontSize: 15 }}>🔔</span>
-              {alertasVencidos > 0 && (
-                <span style={{
-                  position: 'absolute', top: -4, right: -4,
-                  background: 'var(--red)', color: '#fff',
-                  borderRadius: '50%', minWidth: 16, height: 16,
-                  fontSize: 10, fontWeight: 700,
+            {/* SINO — timers vencidos + notificações do sistema */}
+            <div ref={sinoRef} style={{ position: 'relative' }}>
+              <div
+                onClick={() => setSinoAberto(o => !o)}
+                style={{
+                  position: 'relative', cursor: 'pointer',
+                  width: 34, height: 34, borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: '0 3px',
+                  background: totalSino > 0 ? 'rgba(242,92,110,.12)' : 'var(--surface2)',
+                  border: `1px solid ${totalSino > 0 ? 'rgba(242,92,110,.3)' : 'var(--border)'}`,
+                }}
+                title={totalSino > 0 ? `${totalSino} alerta(s)` : 'Nenhum alerta'}
+              >
+                <span style={{ fontSize: 15 }}>🔔</span>
+                {totalSino > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -4, right: -4,
+                    background: 'var(--red)', color: '#fff',
+                    borderRadius: '50%', minWidth: 16, height: 16,
+                    fontSize: 10, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 3px',
+                  }}>
+                    {totalSino}
+                  </span>
+                )}
+              </div>
+
+              {/* DROPDOWN DO SINO */}
+              {sinoAberto && (
+                <div style={{
+                  position: 'absolute', top: 42, right: 0, zIndex: 600,
+                  width: 320, maxHeight: 440, overflowY: 'auto',
+                  background: 'var(--surface)', border: '1px solid var(--border2)',
+                  borderRadius: 'var(--radius)', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
                 }}>
-                  {alertasVencidos}
-                </span>
+
+                  {/* Alertas de VPE/timer vencido */}
+                  {alertasVencidos > 0 && (
+                    <div
+                      onClick={() => { setPaginaAtiva('produtos'); setSinoAberto(false) }}
+                      style={{ padding: '12px 16px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer' }}
+                    >
+                      <div style={{ color: 'var(--red)', fontSize: 13, fontWeight: 600 }}>
+                        🔴 {alertasVencidos} produto{alertasVencidos > 1 ? 's' : ''} com timer vencido
+                      </div>
+                      <div style={{ color: '#666', fontSize: 12, marginTop: 2 }}>
+                        Clique para ver em Produtos
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notificações do sistema */}
+                  {notificacoes.length > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px 4px' }}>
+                        <span style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Notificações</span>
+                        <button onClick={marcarTodasLidas} style={{ background: 'none', border: 'none', color: '#f97316', fontSize: 12, cursor: 'pointer' }}>
+                          Marcar todas como lidas
+                        </button>
+                      </div>
+                      {notificacoes.map(n => (
+                        <div
+                          key={n.id}
+                          onClick={() => marcarLida(n.id)}
+                          style={{ padding: '10px 16px', borderBottom: '1px solid #1a1a1a', cursor: 'pointer' }}
+                        >
+                          <div style={{ color: '#e0e0e0', fontSize: 13, fontWeight: 500 }}>{n.titulo}</div>
+                          <div style={{ color: '#666', fontSize: 12, marginTop: 2 }}>{n.mensagem}</div>
+                          {n.codigoCitel && (
+                            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#f97316', marginTop: 4, display: 'inline-block' }}>
+                              CITEL: {n.codigoCitel}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {totalSino === 0 && (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#555', fontSize: 13 }}>
+                      Nenhum alerta no momento
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
