@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [notificacoes, setNotificacoes] = useState([])
   const [sinoAberto, setSinoAberto] = useState(false)
   const sinoRef = useRef(null)
+  const notificadosRef = useRef(new Set())
+  const primeiraCargaRef = useRef(true)
 
   // Sino de alertas em tempo real — produtos com timer (lê 1x via onSnapshot, sem custo extra)
   useEffect(() => {
@@ -46,6 +48,13 @@ export default function Dashboard() {
     return unsub
   }, [])
 
+  // Pede permissão para notificações nativas do navegador (funciona em segundo plano)
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // Listener de notificações do sistema para o perfil do usuário
   useEffect(() => {
     if (!perfil?.perfil) return
@@ -58,6 +67,24 @@ export default function Dashboard() {
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(n => !n.leitores?.[user?.uid])
         .sort((a, b) => (b.criadoEm?.seconds || 0) - (a.criadoEm?.seconds || 0))
+
+      // Pop-up nativo só para notificações NOVAS — evita disparar em massa
+      // tudo que já estava não-lido na primeira carga da página
+      if (primeiraCargaRef.current) {
+        naoLidas.forEach(n => notificadosRef.current.add(n.id))
+        primeiraCargaRef.current = false
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        naoLidas.forEach(n => {
+          if (!notificadosRef.current.has(n.id)) {
+            notificadosRef.current.add(n.id)
+            new Notification(n.titulo || 'NEXUS MAX', {
+              body: n.mensagem || '',
+              tag: n.id,
+            })
+          }
+        })
+      }
+
       setNotificacoes(naoLidas)
     })
     return () => unsub()
