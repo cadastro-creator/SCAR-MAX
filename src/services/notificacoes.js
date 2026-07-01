@@ -51,6 +51,10 @@ export function getConfigPadrao() {
       intervaloDias: 7,
       perfisAlerta: ['GESTOR_CADASTRO', 'GERENTE_COMERCIAL'],
     },
+    novaSolicitacao: {
+      ativo: true,
+      perfisAlerta: ['GESTOR_CADASTRO'],
+    },
   }
 }
 
@@ -247,6 +251,29 @@ export async function notificarReprovacao({ solicitacao, motivo }) {
   }
 
   await dispararChat(n, `❌ *Solicitação reprovada*\n*Produto:* ${desc}\n*Motivo:* ${motivo || '—'}`, 'REPROVACAO')
+}
+
+export async function notificarNovaSolicitacao({ solicitacao, config: cfgExterno }) {
+  const cfg = cfgExterno || await getConfigSistema()
+  if (!cfg.novaSolicitacao?.ativo) return
+  const desc = solicitacao.descricao || 'produto'
+
+  await criarNotificacao({
+    tipo: 'NOVA_SOLICITACAO',
+    titulo: 'Nova solicitação na fila',
+    mensagem: `"${desc}" (${solicitacao.tipo}) aberta por ${solicitacao.solicitante || 'alguém'}.`,
+    perfis: cfg.novaSolicitacao.perfisAlerta || ['GESTOR_CADASTRO'],
+    solicitacaoId: solicitacao.id,
+  })
+
+  const n = cfg.notificacoes
+  if (n) {
+    await dispararChat(
+      n,
+      `🆕 *Nova solicitação*\n*Produto:* ${desc}\n*Tipo:* ${solicitacao.tipo}\n*Solicitante:* ${solicitacao.solicitante || '—'}`,
+      'NOVA_SOLICITACAO'
+    )
+  }
 }
 
 export async function criarLembreteVPE({ produto, config: cfgExterno }) {

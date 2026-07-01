@@ -34,10 +34,11 @@ const ACOES = [
 ]
 
 const EVENTOS_CHAT = [
-  { key: 'APROVACAO',    label: 'Aprovação' },
-  { key: 'DEVOLUCAO',   label: 'Devolução' },
-  { key: 'REPROVACAO',  label: 'Reprovação' },
-  { key: 'LEMBRETE_VPE',label: 'Lembrete VPE' },
+  { key: 'NOVA_SOLICITACAO', label: 'Nova solicitação' },
+  { key: 'APROVACAO',        label: 'Aprovação' },
+  { key: 'DEVOLUCAO',        label: 'Devolução' },
+  { key: 'REPROVACAO',       label: 'Reprovação' },
+  { key: 'LEMBRETE_VPE',     label: 'Lembrete VPE' },
 ]
 
 const EVENTOS_INAPP = [
@@ -230,6 +231,14 @@ export default function Configuracoes() {
     )
   }
 
+  function togglePerfilNovaSolicitacao(perfil) {
+    const atual = config?.novaSolicitacao?.perfisAlerta || []
+    set(
+      'novaSolicitacao.perfisAlerta',
+      atual.includes(perfil) ? atual.filter(p => p !== perfil) : [...atual, perfil]
+    )
+  }
+
   if (!config) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#555', fontSize: 14 }}>
@@ -356,6 +365,31 @@ export default function Configuracoes() {
                 onChange={v => set('notificacoes.obrigatoriedades.exigirVerificacaoGerencia', v)}
               />
             </Row>
+          </div>
+
+          {/* Nova Solicitação */}
+          <div className="card" style={{ padding: 24 }}>
+            <SecTitle>Nova Solicitação</SecTitle>
+            <Row label="Ativo" desc="Notificar ao abrir uma nova solicitação na fila" last>
+              <Toggle
+                value={config.novaSolicitacao?.ativo ?? true}
+                onChange={v => set('novaSolicitacao.ativo', v)}
+              />
+            </Row>
+            <div style={{ paddingTop: 14 }}>
+              <div style={{ color: '#666', fontSize: 12, marginBottom: 10 }}>Quem recebe a notificação:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['GESTOR_CADASTRO', 'SUPER_ADMIN', 'GERENTE_COMERCIAL', 'FISCAL'].map(p => (
+                  <TagBtn
+                    key={p}
+                    ativo={(config.novaSolicitacao?.perfisAlerta || []).includes(p)}
+                    onClick={() => togglePerfilNovaSolicitacao(p)}
+                  >
+                    {PERFIS_LABEL[p]}
+                  </TagBtn>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Lembrete VPE */}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, serverTimestamp, addDoc } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
-import { notificarAprovacao, notificarDevolucao, notificarReprovacao } from '../services/notificacoes.js'
+import { notificarAprovacao, notificarDevolucao, notificarReprovacao, notificarNovaSolicitacao } from '../services/notificacoes.js'
 
 const STATUS_CONFIG = {
   AGUARDANDO:  { label: 'Aguardando',  badge: 'badge-amber',  icon: '⏳' },
@@ -520,10 +520,11 @@ function ModalNovaSolicitacao({ onClose, perfil, user }) {
 
     setSalvando(true)
     try {
-      await addDoc(collection(db, 'solicitacoes'), {
+      const solicitante = perfil?.nome || user?.displayName || 'Usuário'
+      const ref = await addDoc(collection(db, 'solicitacoes'), {
         ...form,
         status: 'AGUARDANDO',
-        solicitante: perfil?.nome || user?.displayName || 'Usuário',
+        solicitante,
         emailSolicitante: user?.email,
         criadoEm: serverTimestamp(),
         atualizadoEm: serverTimestamp(),
@@ -533,6 +534,7 @@ function ModalNovaSolicitacao({ onClose, perfil, user }) {
           data: new Date().toISOString(),
         }],
       })
+      await notificarNovaSolicitacao({ solicitacao: { id: ref.id, ...form, solicitante } })
       onClose()
     } catch (e) {
       alert('Erro ao salvar: ' + e.message)
